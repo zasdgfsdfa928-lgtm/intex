@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Question Answer Bot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #6a11cb, #2575fc);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 15px;
+      width: 400px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    input {
+      width: 90%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #ffcc00;
+      color: #000;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #ffaa00;
+    }
+    .answer {
+      margin-top: 20px;
+      font-size: 18px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🤖 AI Answer Bot</h2>
+    <input type="text" id="question" placeholder="Ask me anything...">
+    <button onclick="getAnswer()">Ask AI</button>
+    <div id="answer" class="answer"></div>
+  </div>
+
+  <script>
+    const answers = [
+      "That’s an interesting question! I think the answer is hidden in your mind.",
+      "Yes, absolutely! 💡",
+      "No, not really. ❌",
+      "It depends… 🤔",
+      "Try looking at it from a different perspective!",
+      "I believe the answer lies in hard work and patience.",
+      "This might surprise you, but the answer is yes!",
+      "Sorry, I don’t have enough data to answer that right now.",
+      "Definitely not. 🚫",
+      "Of course, 100% true ✅"
+    ];
+
+    function getAnswer() {
+      let question = document.getElementById("question").value;
+      let randomIndex = Math.floor(Math.random() * answers.length);
+      let response = answers[randomIndex];
+
+      if(question.trim() === "") {
+        response = "Please ask me something first!";
+      }
+
+      document.getElementById("answer").innerText = response;
+    }
+  </script>
+</body>
+</html>
