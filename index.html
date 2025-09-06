@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF to Male Voice Reader</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 { color: #333; }
+    input, button {
+      margin: 10px;
+      padding: 10px;
+      width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #output {
+      margin-top: 20px;
+      width: 80%;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0px 2px 6px rgba(0,0,0,0.2);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>📖 PDF to Male Voice Reader</h1>
+  <input type="text" id="pdfLink" placeholder="Paste PDF link here">
+  <button onclick="readPDF()">Read Aloud</button>
+
+  <div id="output">Extracted text will appear here...</div>
+
+  <!-- PDF.js library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+
+  <script>
+    async function readPDF() {
+      const url = document.getElementById("pdfLink").value;
+      if (!url) {
+        alert("Please paste a PDF link.");
+        return;
+      }
+
+      const output = document.getElementById("output");
+      output.innerHTML = "Loading PDF and extracting text...";
+
+      try {
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        let textContent = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const text = await page.getTextContent();
+          const pageText = text.items.map(item => item.str).join(" ");
+          textContent += pageText + "\n";
+        }
+
+        output.innerText = textContent;
+
+        // Speak using male voice
+        const utterance = new SpeechSynthesisUtterance(textContent);
+        const voices = speechSynthesis.getVoices();
+        const maleVoice = voices.find(voice =>
+          voice.name.toLowerCase().includes("male") || voice.name.toLowerCase().includes("english us")
+        );
+        if (maleVoice) utterance.voice = maleVoice;
+        utterance.rate = 1; // Speed
+        speechSynthesis.speak(utterance);
+
+      } catch (error) {
+        output.innerHTML = "❌ Error loading PDF. Make sure the link is valid and CORS allowed.";
+        console.error(error);
+      }
+    }
+  </script>
+</body>
+</html>
