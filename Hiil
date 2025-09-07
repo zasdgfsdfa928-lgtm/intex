@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini AI-like Video Editor (Browser)</title>
+<style>
+  :root { --bg: #0f1724; --card: #0b1220; --accent: #7c3aed; --glass: rgba(255,255,255,0.03); color-scheme: dark; }
+  body { margin:0; font-family: Inter, system-ui, Arial; background: linear-gradient(180deg,#071028 0%, #09121a 100%); color:#e6eef8; padding:20px; }
+  .app { max-width:1100px; margin:0 auto; display:grid; grid-template-columns: 1fr 420px; gap:20px; }
+  .card { background:var(--card); border-radius:12px; padding:16px; box-shadow: 0 6px 20px rgba(2,6,23,0.6); }
+  h1{margin:4px 0 12px;font-size:18px}
+  label{display:block;font-size:13px;margin-top:8px;color:#bcd3ff}
+  input[type=file]{display:block;margin-top:6px}
+  .preview { background:var(--glass); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; align-items:center; }
+  canvas{ width:100%; height:auto; background:#000; border-radius:6px; display:block; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  button { background:linear-gradient(90deg,var(--accent), #4c1d95); border:0; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; }
+  .small { padding:6px 8px; font-size:13px; }
+  input[type=range]{ width:100%;}
+  .col { display:flex; flex-direction:column; gap:8px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .muted { color:#93b0ff; font-size:13px }
+  footer { grid-column: 1 / -1; text-align:center; margin-top:12px; color:#9fb4ff; font-size:13px; }
+  .export-link { display:inline-block; margin-left:8px; color:#9ff; text-decoration:underline; }
+  .note{ font-size:12px; color:#9fb4ff; margin-top:10px }
+  input[type=text], select { padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit }
+  .field { display:flex; gap:8px; align-items:center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <h1>Mini AI-like Video Editor — Browser</h1>
+    <div class="col">
+      <label>1) Upload video</label>
+      <input id="videoFile" type="file" accept="video/*">
+      <label>2) Upload background music (optional)</label>
+      <input id="audioFile" type="file" accept="audio/*,video/*">
+      <div class="row">
+        <div style="flex:1">
+          <label>Trim start (seconds)</label>
+          <input id="startRange" type="range" min="0" max="0" step="0.1" value="0">
+        </div>
+        <div style="width:90px">
+          <label>Start</label>
+          <input id="startTime" type="text" value="0.0">
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Trim end (seconds)</label>
+          <input id="endRange" type="range" min="0" max="0" step="0.1" value="0">
+        </div>
+        <div style="width:90px">
+          <label>End</label>
+          <input id="endTime" type="text" value="0.0">
+        </div>
+      </div>
+
+      <label>3) Text overlay</label>
+      <div class="row">
+        <input id="overlayText" type="text" placeholder="Write overlay text...">
+        <select id="fontSize">
+          <option value="32">32px</option>
+          <option value="40" selected>40px</option>
+          <option value="56">56px</option>
+          <option value="72">72px</option>
+        </select>
+      </div>
+      <div class="row">
+        <label style="margin-right:6px">Pos X</label>
+        <input id="posX" type="range" min="0" max="100" value="50">
+        <label style="width:40px">Pos Y</label>
+        <input id="posY" type="range" min="0" max="100" value="90">
+      </div>
+
+      <label>4) Mix volumes</label>
+      <div class="row">
+        <div style="flex:1">
+          <label class="muted">Video volume</label>
+          <input id="videoVol" type="range" min="0" max="2" step="0.01" value="1">
+        </div>
+        <div style="flex:1">
+          <label class="muted">Music volume</label>
+          <input id="musicVol" type="range" min="0" max="2" step="0.01" value="0.8">
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="previewBtn" class="small">Preview</button>
+        <button id="stopPreview" class="small">Stop</button>
+        <button id="exportBtn" class="small">Export (Record)</button>
+        <div id="status" class="muted">Idle</div>
+      </div>
+
+      <div class="note">Tip: Use short clips for best browser performance. If recording stops unexpectedly, try smaller resolution or shorter length.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>Preview & Canvas</h1>
+    <div class="preview">
+      <!-- Hidden media elements -->
+      <video id="videoEl" crossorigin="anonymous" playsinline style="display:none"></video>
+      <audio id="musicEl" crossorigin="anonymous" loop style="display:none"></audio>
+
+      <!-- Canvas preview -->
+      <canvas id="canvas"></canvas>
+
+      <div style="width:100%">
+        <div class="row">
+          <label style="margin-right:8px">FPS</label>
+          <select id="fps">
+            <option>24</option><option selected>30</option><option>60</option>
+          </select>
+          <label style="margin-left:12px">Resolution</label>
+          <select id="res">
+            <option value="auto">Use source</option>
+            <option value="1280">1280x720</option>
+            <option value="854">854x480</option>
+            <option value="640">640x360</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" style="width:100%; justify-content:space-between;">
+        <div class="muted">Preview shows overlay + mixed audio (muted HTML media to avoid double playback)</div>
+        <div id="downloadArea"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="muted">Built with browser APIs: Canvas + WebAudio + MediaRecorder — No server required.</footer>
+</div>
+
+<script>
+(async function(){
+  // Elements
+  const videoFile = document.getElementById('videoFile');
+  const audioFile = document.getElementById('audioFile');
+  const videoEl = document.getElementById('videoEl');
+  const musicEl = document.getElementById('musicEl');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const previewBtn = document.getElementById('previewBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const stopPreview = document.getElementById('stopPreview');
+  const status = document.getElementById('status');
+  const overlayText = document.getElementById('overlayText');
+  const fpsSel = document.getElementById('fps');
+  const resSel = document.getElementById('res');
+  const posX = document.getElementById('posX');
+  const posY = document.getElementById('posY');
+  const fontSizeSel = document.getElementById('fontSize');
+  const videoVol = document.getElementById('videoVol');
+  const musicVol = document.getElementById('musicVol');
+  const startRange = document.getElementById('startRange');
+  const endRange = document.getElementById('endRange');
+  const startTimeInput = document.getElementById('startTime');
+  const endTimeInput = document.getElementById('endTime');
+  const downloadArea = document.getElementById('downloadArea');
+
+  // Audio context for mixing
+  let audioCtx, videoSourceNode, musicSourceNode, videoGain, musicGain, dest;
+  let animId = null;
+  let playingPreview = false;
+
+  function setStatus(msg){ status.textContent = msg; }
+
+  // Load video file into hidden video element
+  videoFile.addEventListener('change', (ev)=>{
+    const f = ev.target.files[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    videoEl.src = url;
+    videoEl.load();
+    videoEl.muted = true; // We'll route audio via AudioContext to avoid doubling
+    setStatus('Video loaded. Waiting metadata...');
+  });
+
+  audioFile.addEventListener('change', (ev)=>{
+    const f = ev.target.files[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    musicEl.src = url;
+    musicEl.load();
+    setStatus('Music loaded');
+  });
+
+  // When video metadata available -> setup ranges and canvas
+  videoEl.addEventListener('loadedmetadata', ()=>{
+    const dur = videoEl.duration || 0;
+    startRange.max = dur;
+    endRange.max = dur;
+    endRange.value = dur;
+    startRange.value = 0;
+    startTimeInput.value = '0.0';
+    endTimeInput.value = dur.toFixed(1);
+    setCanvasSize();
+    setStatus('Ready (video duration: '+dur.toFixed(1)+'s)');
+  });
+
+  // Sync range + text
+  startRange.addEventListener('input', ()=> {
+    startTimeInput.value = parseFloat(startRange.value).toFixed(2);
+  });
+  endRange.addEventListener('input', ()=> {
+    endTimeInput.value = parseFloat(endRange.value).toFixed(2);
+  });
+  startTimeInput.addEventListener('change', ()=> {
+    let v = parseFloat(startTimeInput.value)||0;
+    v = Math.max(0, Math.min(v, parseFloat(endRange.max || 0)));
+    startRange.value = v;
+    startTimeInput.value = v.toFixed(2);
+  });
+  endTimeInput.addEventListener('change', ()=> {
+    let v = parseFloat(endTimeInput.value)||0;
+    v = Math.max(0, Math.min(v, parseFloat(endRange.max || 0)));
+    endRange.value = v;
+    endTimeInput.value = v.toFixed(2);
+  });
+
+  function setCanvasSize(){
+    // choose resolution
+    const prefer = resSel.value;
+    let w = videoEl.videoWidth || 1280;
+    let h = videoEl.videoHeight || 720;
+    if(prefer !== 'auto'){
+      const targW = parseInt(prefer,10);
+      const ratio = h / w;
+      w = targW;
+      h = Math.round(targW * ratio);
+    }
+    canvas.width = w;
+    canvas.height = h;
+  }
+
+  resSel.addEventListener('change', setCanvasSize);
+
+  // drawing loop: draws video frame + overlay text
+  function drawFrame(){
+    if(videoEl.paused || videoEl.ended) return;
+    // draw video scaled to canvas
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    const cw = canvas.width;
+    const ch = canvas.height;
+    // Fit video to canvas preserving aspect
+    const videoRatio = vw / vh;
+    const canvasRatio = cw / ch;
+    let dw, dh, dx, dy;
+    if(videoRatio > canvasRatio){
+      // video wider
+      dw = cw;
+      dh = Math.round(cw / videoRatio);
+      dx = 0;
+      dy = Math.round((ch - dh)/2);
+    } else {
+      dh = ch;
+      dw = Math.round(ch * videoRatio);
+      dy = 0;
+      dx = Math.round((cw - dw)/2);
+    }
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,cw,ch);
+    try {
+      ctx.drawImage(videoEl, dx, dy, dw, dh);
+    } catch(err){
+      // might occasionally throw due to cross-origin or paused video
+    }
+
+    // draw text overlay
+    const txt = overlayText.value.trim();
+    if(txt){
+      const size = parseInt(fontSizeSel.value,10) || 40;
+      ctx.font = `700 ${size}px system-ui, Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // shadow for readability
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      const x = (parseInt(posX.value)/100) * cw;
+      const y = (parseInt(posY.value)/100) * ch;
+      ctx.lineWidth = Math.max(2, Math.round(size * 0.12));
+      // stroke
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText(txt, x, y);
+      // fill
+      ctx.fillStyle = 'white';
+      ctx.fillText(txt, x, y);
+    }
+  }
+
+  function renderLoop(){
+    drawFrame();
+    animId = requestAnimationFrame(renderLoop);
+  }
+
+  // Create audio graph for mixing
+  async function ensureAudioGraph(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    videoSourceNode = audioCtx.createMediaElementSource(videoEl);
+    musicSourceNode = audioCtx.createMediaElementSource(musicEl);
+    videoGain = audioCtx.createGain();
+    musicGain = audioCtx.createGain();
+    dest = audioCtx.createMediaStreamDestination();
+
+    videoSourceNode.connect(videoGain).connect(dest);
+    musicSourceNode.connect(musicGain).connect(dest);
+
+    // Keep audio nodes disconnected from default speakers (we will play via the media elements if user wants)
+    // But we still set audio elements muted to avoid double play when recording; preview plays the mixed audio via audioCtx if desired.
+  }
+
+  // Preview: play video from start to end, start music too, run canvas draw
+  previewBtn.addEventListener('click', async ()=>{
+    if(!videoEl.src){ alert('Load a video file first'); return; }
+    await ensureAudioGraph();
+    setCanvasSize();
+    const start = parseFloat(startRange.value)||0;
+    const end = parseFloat(endRange.value)||videoEl.duration;
+    if(start >= end){ alert('Start must be before End'); return; }
+
+    // set volumes
+    videoGain.gain.value = parseFloat(videoVol.value) || 1.0;
+    musicGain.gain.value = parseFloat(musicVol.value) || 1.0;
+
+    // Make sure music element starts at 0
+    musicEl.currentTime = 0;
+    videoEl.currentTime = start;
+
+    // Unmute audio context destination by connecting to audioCtx.destination for preview playback
+    // But only if user wants audible preview — we will play via audio elements but since we mute videoEl we can connect
+    // Create a temporary monitor node
+    audioCtx.resume();
+    const monitor = dest.stream; // we will not auto-play from dest; instead play media elements muted=false when previewing
+    // For simpler user preview, unmute the media elements (but careful to avoid double audio)
+    // Strategy: we will keep videoEl muted and play an <audio> that uses dest.stream via a new Audio element
+    // create a playback element if not exists
+    if(!window._mixedAudioElement){
+      window._mixedAudioElement = new Audio();
+      window._mixedAudioElement.autoplay = true;
+      window._mixedAudioElement.controls = false;
+      window._mixedAudioElement.muted = false;
+      // attach the destination stream to this Audio element for preview playback
+    }
+    window._mixedAudioElement.srcObject = dest.stream;
+
+    // Start playing both elements
+    try {
+      await videoEl.play();
+    } catch (e) {
+      console.log('Video play blocked:', e);
+    }
+    try {
+      await musicEl.play();
+    } catch (e) {
+      console.log('Music play blocked:', e);
+    }
+
+    // Start render loop
+    if(animId) cancelAnimationFrame(animId);
+    renderLoop();
+    playingPreview = true;
+    setStatus('Previewing from '+start.toFixed(2)+' to '+end.toFixed(2)+'s');
+
+    // Stop preview when reaches end
+    function onTimeUpdate(){
+      if(videoEl.currentTime >= end - 0.05){
+        stopAllPreview();
+      }
+    }
+    videoEl.addEventListener('timeupdate', onTimeUpdate, { once: false });
+    stopPreview.onclick = stopAllPreview;
+  });
+
+  function stopAllPreview(){
+    if(animId) cancelAnimationFrame(animId);
+    animId = null;
+    // Pause media
+    try{ videoEl.pause(); }catch{}
+    try{ musicEl.pause(); }catch{}
+    if(window._mixedAudioElement){
+      try{ window._mixedAudioElement.pause(); }catch{}
+    }
+    playingPreview = false;
+    setStatus('Idle');
+  }
+
+  // Export: Records the canvas + mixed audio into a WebM blob
+  exportBtn.addEventListener('click', async ()=>{
+    if(!videoEl.src){ alert('Load a video file first'); return; }
+    await ensureAudioGraph();
+    setCanvasSize();
+
+    const start = parseFloat(startRange.value)||0;
+    const end = parseFloat(endRange.value)||videoEl.duration;
+    if(start >= end){ alert('Start must be before End'); return; }
+    const fps = parseInt(fpsSel.value,10) || 30;
+    const recDuration = Math.max(0.1, end - start);
+    // Prepare source volumes
+    videoGain.gain.value = parseFloat(videoVol.value) || 1.0;
+    musicGain.gain.value = parseFloat(musicVol.value) || 1.0;
+
+    // Prepare capture streams
+    const canvasStream = canvas.captureStream(fps);
+    const audioStream = dest.stream; // from audioCtx
+    const mixedStream = new MediaStream();
+    // add video tracks from canvas
+    canvasStream.getVideoTracks().forEach(t => mixedStream.addTrack(t));
+    // add audio tracks
+    audioStream.getAudioTracks().forEach(t => mixedStream.addTrack(t));
+
+    // Prepare MediaRecorder
+    let options = { mimeType: 'video/webm;codecs=vp8,opus' };
+    if(!MediaRecorder.isTypeSupported(options.mimeType)){
+      options = { mimeType: 'video/webm;codecs=vp8' };
+    }
+    let recorder;
+    try {
+      recorder = new MediaRecorder(mixedStream, options);
+    } catch (e) {
+      alert('MediaRecorder not supported or invalid codec: ' + e);
+      return;
+    }
+
+    const chunks = [];
+    recorder.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
+    recorder.onstop = ev => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'edited-video.webm';
+      a.textContent = 'Download Result';
+      a.className = 'export-link';
+      downloadArea.innerHTML = '';
+      downloadArea.appendChild(a);
+      setStatus('Export ready — click download (webm)');
+      // revoke later if needed
+    };
+
+    // Start video and music at the required start position
+    videoEl.currentTime = start;
+    musicEl.currentTime = 0; // music always from 0 for simplicity; could be adjusted
+    // Ensure media play permission/resume audio context
+    await audioCtx.resume();
+
+    // Start playing underlying media elements (they are muted for direct output; audio comes from audioCtx dest)
+    try { await videoEl.play(); } catch(e){}
+    try { await musicEl.play(); } catch(e){}
+
+    // Start drawing frames & recording
+    if(animId) cancelAnimationFrame(animId);
+    renderLoop();
+
+    // Start recorder
+    recorder.start();
+
+    setStatus('Recording...');
+    // Stop after duration (or you could watch video time)
+    const stopAfter = (recDuration + 0.3) * 1000;
+    setTimeout(async ()=>{
+      recorder.stop();
+      // try to stop media playback
+      try { videoEl.pause(); } catch(e){}
+      try { musicEl.pause(); } catch(e){}
+      if(animId) cancelAnimationFrame(animId);
+      animId = null;
+    }, stopAfter);
+  });
+
+  // Safety: clean up object URLs when page unloads
+  window.addEventListener('unload', ()=>{
+    try{ URL.revokeObjectURL(videoEl.src); }catch{}
+    try{ URL.revokeObjectURL(musicEl.src); }catch{}
+  });
+
+  // Quick UI polish: show frame size when metadata ready
+  videoEl.addEventListener('loadeddata', setCanvasSize);
+})();
+</script>
+</body>
+</html>
