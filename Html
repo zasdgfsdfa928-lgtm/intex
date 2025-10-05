@@ -1,0 +1,218 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Upload + Attach Prompt → Create Edited Photo</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f6f7fb;margin:0}
+    .card{background:white;border-radius:12px;padding:20px;box-shadow:0 6px 24px rgba(20,20,50,0.08);width:100%;max-width:820px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:240px}
+    input[type=file]{display:block}
+    img.preview, img.result{max-width:100%;border-radius:8px;border:1px solid #e6e9ef}
+    button{background:#0b63ff;color:white;padding:10px 14px;border-radius:8px;border:0;cursor:pointer}
+    pre{background:#f3f5f9;padding:10px;border-radius:8px;overflow:auto}
+    .hint{font-size:13px;color:#556}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Upload a photo — it will be edited with a fixed humorous prompt</h2>
+    <p class="hint">This page uploads your image to a server endpoint and attaches a fixed prompt to request an edited image. See the included server example (Node.js + Express) inside the commented section at the bottom of this file.</p><div class="row">
+  <div class="col">
+    <label for="file">Choose a photo to edit</label><br />
+    <input id="file" type="file" accept="image/*" />
+    <div style="height:12px"></div>
+    <div id="previewWrap">
+      <div class="hint">Preview:</div>
+      <img id="preview" class="preview" alt="preview" src="" style="display:none" />
+    </div>
+
+    <div style="height:12px"></div>
+
+    <button id="sendBtn" disabled>Send & Create Edited Photo</button>
+    <div style="height:8px"></div>
+    <div id="status" class="hint"></div>
+  </div>
+
+  <div class="col">
+    <div class="hint">Prompt (attached automatically):</div>
+    <pre id="promptBox"></pre>
+
+    <div style="height:8px"></div>
+    <div class="hint">Result:</div>
+    <img id="result" class="result" alt="result" src="" style="display:none" />
+    <div style="height:8px"></div>
+    <a id="downloadLink" style="display:none">Download edited image</a>
+  </div>
+</div>
+
+<hr />
+<div class="hint">Notes: This client does <strong>not</strong> contain your API key. You must run a small server that accepts the multipart upload and forwards it to an image-editing API (e.g., OpenAI Images Edits) securely. Example server code is included below as a commented block.</div>
+
+  </div>  <script>
+    // The exact prompt the user requested — it will be sent as the 'prompt' field.
+    const FIXED_PROMPT = `A humorous portrait of a man with an unusual hairstyle — the sides of his head shaved clean, two small pigtails sticking out behind his ears, and a tall strip of hair spiked up in the center like a mohawk. The man is standing indoors with warm lighting, wearing a plain white shirt, and smiling slightly. The image has a funny, quirky, and lighthearted tone, realistic lighting and background, high-quality detail.`;
+
+    const fileInput = document.getElementById('file');
+    const preview = document.getElementById('preview');
+    const sendBtn = document.getElementById('sendBtn');
+    const status = document.getElementById('status');
+    const promptBox = document.getElementById('promptBox');
+    const resultImg = document.getElementById('result');
+    const downloadLink = document.getElementById('downloadLink');
+
+    promptBox.textContent = FIXED_PROMPT;
+
+    let selectedFile = null;
+
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return resetPreview();
+      selectedFile = f;
+      const url = URL.createObjectURL(f);
+      preview.src = url;
+      preview.style.display = 'block';
+      sendBtn.disabled = false;
+      status.textContent = '';
+      resultImg.style.display = 'none';
+      downloadLink.style.display = 'none';
+    });
+
+    function resetPreview(){
+      selectedFile = null;
+      preview.src = '';
+      preview.style.display = 'none';
+      sendBtn.disabled = true;
+    }
+
+    sendBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      status.textContent = 'Uploading and requesting edited image...';
+      sendBtn.disabled = true;
+
+      try {
+        const form = new FormData();
+        form.append('image', selectedFile, selectedFile.name);
+        form.append('prompt', FIXED_PROMPT);
+        // additional options you may want to support
+        form.append('size', '1024x1024');
+
+        // IMPORTANT: Change this URL to your server endpoint that forwards the request
+        // to the image editing API (so your API key stays secret). For example: /edit-image
+        const endpoint = '/edit-image';
+
+        const resp = await fetch(endpoint, { method: 'POST', body: form });
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`Server returned ${resp.status}: ${txt}`);
+        }
+
+        // expect the server to return the edited image binary (image/png or image/jpeg)
+        const blob = await resp.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        resultImg.src = objectUrl;
+        resultImg.style.display = 'block';
+
+        // show download link
+        downloadLink.href = objectUrl;
+        downloadLink.download = 'edited-image.png';
+        downloadLink.textContent = 'Download edited image';
+        downloadLink.style.display = 'inline-block';
+
+        status.textContent = 'Edited image ready.';
+
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error: ' + err.message;
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+  </script>  <!--
+  ================= Node.js + Express server example (save as server.js) =================
+  This example receives the uploaded image and prompt, forwards them to OpenAI's
+  Images Edits endpoint, and returns the edited image binary to the client.
+
+  SECURITY: Never put your OpenAI API key in client-side code. Keep it on the server.
+
+  Before running: npm install express multer axios form-data
+
+  Replace process.env.OPENAI_API_KEY with your secret (e.g., set via environment variable).
+
+  NOTE: The exact OpenAI images API endpoint and response format can change over time.
+  This example assumes the API returns base64 image data in data[0].b64_json.
+  Adjust as needed for the provider you use.
+  ======================================================================================
+
+  // ----- server.js (example) -----
+  const express = require('express');
+  const multer = require('multer');
+  const axios = require('axios');
+  const FormData = require('form-data');
+  const fs = require('fs');
+
+  const upload = multer({ dest: 'uploads/' });
+  const app = express();
+  const PORT = process.env.PORT || 3000;
+
+  app.post('/edit-image', upload.single('image'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).send('No image uploaded');
+      const prompt = req.body.prompt || '';
+      const size = req.body.size || '1024x1024';
+
+      // Read file from disk (multer saved it)
+      const fileStream = fs.createReadStream(req.file.path);
+
+      // Build form-data for the provider (example for OpenAI images edits endpoint)
+      const form = new FormData();
+      form.append('image', fileStream, req.file.originalname);
+      form.append('prompt', prompt);
+      form.append('size', size);
+
+      // call the images edit endpoint
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return res.status(500).send('Server misconfigured: missing API key');
+
+      const response = await axios.post('https://api.openai.com/v1/images/edits', form, {
+        headers: {
+          ...form.getHeaders(),
+          'Authorization': `Bearer ${apiKey}`
+        },
+        responseType: 'json'
+      });
+
+      // Clean up the uploaded file
+      fs.unlink(req.file.path, () => {});
+
+      // The response from many image APIs includes base64 data at data[0].b64_json
+      // If that's the case, convert and send as a PNG
+      if (response.data && response.data.data && response.data.data[0] && response.data.data[0].b64_json) {
+        const b64 = response.data.data[0].b64_json;
+        const buffer = Buffer.from(b64, 'base64');
+        res.set('Content-Type', 'image/png');
+        return res.send(buffer);
+      }
+
+      // Otherwise some APIs return a URL. If so, you could fetch that URL and stream it.
+      // Example (pseudo): if (response.data && response.data.data[0].url) { ... }
+
+      return res.status(500).send('Unexpected provider response format');
+
+    } catch (err) {
+      console.error(err.response ? err.response.data : err);
+      res.status(500).send('Server error: ' + (err.message || 'unknown'));
+    }
+  });
+
+  app.listen(PORT, () => {
+    console.log(`Server listening on ${PORT}`);
+  });
+
+  ======================================================================================
+  --></body>
+</html>
